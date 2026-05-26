@@ -55,19 +55,35 @@ def decode_image(b64: str) -> Image.Image:
         b64 = b64.replace(p, "")
     return Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB")
 
-def is_skin(image_pil: Image.Image, threshold=0.15):
+def is_skin(image_pil: Image.Image, threshold=0.15) -> tuple:
     img = image_pil.resize((128, 128)).convert("RGB")
     arr = np.array(img, dtype=np.float32)
     R, G, B = arr[:,:,0], arr[:,:,1], arr[:,:,2]
     cmax = np.maximum(np.maximum(R, G), B)
     cmin = np.minimum(np.minimum(R, G), B)
-    kovac = (R>95)&(G>40)&(B>20)&((cmax-cmin)>15)&(np.abs(R-G)>15)&(R>G)&(R>B)
+
+    # Kovac rules
+    kovac = (
+        (R > 95) & (G > 40) & (B > 20) &
+        ((cmax - cmin) > 15) &
+        (np.abs(R - G) > 15) &
+        (R > G) & (R > B)
+    )
+
+    # YCbCr rules
     Y  =  0.299*R + 0.587*G + 0.114*B
     Cb = -0.169*R - 0.331*G + 0.500*B + 128
     Cr =  0.500*R - 0.419*G - 0.081*B + 128
-    ycbcr = (Y>80)&(Cb>=77)&(Cb<=127)&(Cr>=133)&(Cr<=173)
-    ratio = float((kovac|ycbcr).sum()) / (128*128)
-    return ratio >= threshold, round(ratio, 3)
+    ycbcr = (Y > 80) & (Cb >= 77) & (Cb <= 127) & (Cr >= 133) & (Cr <= 173)
+
+    # Extra: reject if image is too grey (low saturation = keyboard/carpet)
+    # Saturation in HSV
+    s = np.where(cmax > 0, (cmax - cmin) / cmax, 0.0)
+    not_grey = s > 0.12  # skin has some colour, grey keyboards don't
+
+    skin_mask = (kovac | ycbcr) & not_grey
+    skin_ratio = float(skin_mask.sum()) / (128 * 128)
+    return skin_ratio >= threshold, round(skin_ratio, 3)
 
 def compute_entropy(predictions):
     probs = np.array([p["score"] for p in predictions], dtype=np.float64)
