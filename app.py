@@ -55,7 +55,7 @@ def decode_image(b64: str) -> Image.Image:
         b64 = b64.replace(p, "")
     return Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB")
 
-def is_skin(image_pil: Image.Image, threshold=0.07):
+def is_skin(image_pil: Image.Image, threshold=0.15):
     img = image_pil.resize((128, 128)).convert("RGB")
     arr = np.array(img, dtype=np.float32)
     R, G, B = arr[:,:,0], arr[:,:,1], arr[:,:,2]
